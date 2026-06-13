@@ -21,6 +21,11 @@ function GameApp({
 }) {
   const room = useRoom(session.roomId, {
     displayName: session.name,
+    // Advertise host priority so the library pins host election to the world
+    // owner (the room creator) instead of the lowest random peerId. Without
+    // this, a joiner whose random peerId sorts below the creator's is elected
+    // "host" while holding no world, which deadlocks world sync.
+    playerMetadata: { hostPriority: session.isCreator ? 0 : 1 },
     onError: (e) => console.error("[multiplayer]", e),
   });
   const { setRoomState } = useHost();

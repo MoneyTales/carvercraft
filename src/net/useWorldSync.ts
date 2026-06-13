@@ -23,8 +23,6 @@ export function useWorldSync(opts: { isHost: boolean; isCreator: boolean }) {
   const worldRef = useRef<VoxelWorld | null>(null);
   const editLog = useRef(new Map<string, number>());
   const remotes = useRef(new Map<string, RemoteState>());
-  const isHostRef = useRef(opts.isHost);
-  isHostRef.current = opts.isHost;
 
   const packEdits = useCallback((): number[] => {
     const edits: number[] = [];
@@ -63,8 +61,14 @@ export function useWorldSync(opts: { isHost: boolean; isCreator: boolean }) {
     const subs = [
       onEvent("syncReq", (_d, peerId) => {
         const w = worldRef.current;
-        if (import.meta.env.DEV) console.log("[cc] syncReq from", peerId, "answer:", !!w && isHostRef.current);
-        if (!w || !isHostRef.current) return;
+        if (import.meta.env.DEV) console.log("[cc] syncReq from", peerId, "answer:", !!w);
+        // Answer whenever we HOLD the world, regardless of host status. Host
+        // election is by peerId and is decoupled from world ownership: a joiner
+        // can be elected host before it has the world while the creator (the
+        // world owner) is demoted to non-host. Gating the answer on isHost
+        // deadlocked world sync whenever the joiner's random peerId sorted
+        // below the creator's (~50% of joins).
+        if (!w) return;
         // broadcast, not targeted: targeted sends can silently drop on a
         // freshly-opened channel (engine bug); receivers ignore duplicates
         broadcast("syncRes", { seed: w.seed, edits: packEdits() });
@@ -114,25 +118,27 @@ export function useWorldSync(opts: { isHost: boolean; isCreator: boolean }) {
     return () => subs.forEach((u) => u());
   }, [onEvent, sendEvent]);
 
-  // Host-push fallback: don't rely on the joiner's syncReq arriving (one
-  // direction of a fresh data channel can lag). When the host sees a new
-  // peer, it pushes the world a few times — the receiver ignores duplicates.
+  // World-holder push fallback: don't rely on the joiner's syncReq arriving
+  // (one direction of a fresh data channel can lag). When any peer that HOLDS
+  // the world sees a new peer, it pushes the world a few times — the receiver
+  // ignores duplicates. Decoupled from host status for the same reason as the
+  // syncReq answer above (the world owner is not necessarily the elected host).
   const pushed = useRef(new Set<string>());
   useEffect(() => {
-    if (!opts.isHost || !world) return;
+    if (!world) return;
     for (const p of players) {
       if (p.isSelf || !p.isConnected || pushed.current.has(p.peerId)) continue;
       pushed.current.add(p.peerId);
       for (const delay of [800, 2500, 6000]) {
         setTimeout(() => {
           const w = worldRef.current;
-          if (!w || !isHostRef.current) return;
-          if (import.meta.env.DEV) console.log("[cc] host-push syncRes (new peer", p.peerId, ")");
+          if (!w) return;
+          if (import.meta.env.DEV) console.log("[cc] world-push syncRes (new peer", p.peerId, ")");
           broadcast("syncRes", { seed: w.seed, edits: packEdits() });
         }, delay);
       }
     }
-  }, [opts.isHost, world, players, sendEvent, packEdits]);
+  }, [world, players, sendEvent, packEdits]);
 
   /** local player edits a block: apply, log, broadcast, fx */
   const applyLocalEdit = useCallback(
