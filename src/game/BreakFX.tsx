@@ -9,6 +9,12 @@ import { sfx } from "../audio/sfx";
 function crumbConfig(color: string) {
   return {
     maxParticles: 120,
+    // Burst mode: the emitter must never stream. The useParticles hook calls
+    // start() on mount (enabled defaults true), and the default "stream"
+    // emission would then fountain 50 particles/sec forever from the last
+    // break point. In burst mode with no scheduled bursts, nothing auto-emits;
+    // only our explicit burst() fires, and those particles age out in ~0.5s.
+    emission: "burst" as const,
     autoPlay: false,
     loop: false,
     particle: {
