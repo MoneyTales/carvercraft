@@ -1,0 +1,41 @@
+{
+  "name": "carvercraft",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Multiplayer voxel sandbox built with CarverJS - one-shotted by Claude",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@carverjs/core": "^0.0.2",
+    "@carverjs/multiplayer": "^0.0.2",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.5.0",
+    "firebase": "^11.10.0",
+    "mqtt": "^5.10.0",
+    "msgpackr": "^1.11.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "three": "^0.183.1",
+    "three-stdlib": "^2.36.1",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/three": "0.184.1",
+    "@vitejs/plugin-react": "^5.1.1",
+    "playwright": "1.60.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/three": "0.184.1"
+    }
+  }
+}

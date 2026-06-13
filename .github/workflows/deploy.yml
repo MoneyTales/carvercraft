@@ -1,0 +1,62 @@
+# Builds CarverCraft and deploys the static bundle to GitHub Pages.
+# Prereq: @carverjs/core and @carverjs/multiplayer must be on npm (the repo's
+# package.json points at the published versions, not local link: paths).
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+        env:
+          # Firebase RTDB signaling. Set repo variable VITE_FIREBASE_RTDB_URL
+          # under Settings > Secrets and variables > Actions > Variables.
+          # If unset, the game falls back to free public MQTT brokers.
+          VITE_FIREBASE_RTDB_URL: ${{ vars.VITE_FIREBASE_RTDB_URL }}
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: "./dist"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
