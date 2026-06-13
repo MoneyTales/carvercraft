@@ -274,6 +274,28 @@ export function PlayerController({ camRef, world, applyEdit, selfId }: Props) {
       }
     }
 
+    // Water-exit assist: when swimming into an obstacle, rise along it. This
+    // carries you up from any depth to the surface, and because it stays active
+    // for a block above the waterline (nearWater), it lifts you over a 1-block
+    // shore lip with plain forward input — no jump needed. The nearWater gate
+    // means it can't levitate you up a tall dry cliff; you just reach the bank.
+    if (!rig.flying && wl > 0) {
+      const cx0 = Math.floor(p.x);
+      const cz0 = Math.floor(p.z);
+      const fy = Math.floor(p.y);
+      const nearWater =
+        rig.inWater ||
+        world.get(cx0, fy, cz0) === B.WATER ||
+        world.get(cx0, fy - 1, cz0) === B.WATER;
+      if (nearWater) {
+        const bx = Math.floor(p.x + wx * (HALF + 0.25));
+        const bz = Math.floor(p.z + wz * (HALF + 0.25));
+        if (world.solidAt(bx, fy, bz)) {
+          v.y = Math.max(v.y, 5.0);
+        }
+      }
+    }
+
     // ── integrate + collide per axis ──
     const wasGround = rig.onGround;
     rig.onGround = false;

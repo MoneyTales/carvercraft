@@ -21,6 +21,16 @@ export function ViewModel({ camRef }: { camRef: RefObject<THREE.Camera | null> }
         map: getAtlas().texture,
         vertexColors: true,
         alphaTest: 0.5,
+        // The held block is a first-person overlay that must draw on top of
+        // everything, including transparent water and clouds. Without
+        // transparent:true it sits in the opaque queue, which renders BEFORE
+        // the transparent pass — so water/clouds paint over the hand. Marking
+        // it transparent moves it into the transparent queue where its high
+        // renderOrder (1000) makes it draw last. depthTest:false keeps it on
+        // top regardless of depth; the cube is convex with backface culling so
+        // no self-sorting is needed.
+        transparent: true,
+        depthWrite: false,
         depthTest: false,
       }),
     [],

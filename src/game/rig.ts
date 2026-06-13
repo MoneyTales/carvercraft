@@ -23,6 +23,11 @@ export const rig = {
   target: null as null | { x: number; y: number; z: number; nx: number; ny: number; nz: number; block: number },
 };
 
+// Dev-only handle for automated visual verification (positioning the camera).
+if (import.meta.env.DEV && typeof window !== "undefined") {
+  (window as unknown as Record<string, unknown>).__rig = rig;
+}
+
 export function resetRig(x: number, y: number, z: number): void {
   rig.pos.set(x, y, z);
   rig.vel.set(0, 0, 0);

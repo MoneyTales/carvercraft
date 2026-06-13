@@ -49,3 +49,9 @@ export const useUI = create<UIState>()((set) => ({
       return { toasts: [...s.toasts.slice(-3), { id, text }] };
     }),
 }));
+
+// Dev-only handle for automated visual verification (forcing the locked state
+// to hide the pause overlay, since headless browsers can't acquire pointer lock).
+if (import.meta.env.DEV && typeof window !== "undefined") {
+  (window as unknown as Record<string, unknown>).__ui = useUI;
+}

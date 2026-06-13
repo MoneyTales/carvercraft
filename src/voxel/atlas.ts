@@ -4,9 +4,11 @@ import { mulberry32 } from "./noise";
 
 // Procedural 16px texture atlas — zero asset files, deterministic on every peer.
 
-const T = 16; // tile px
+const T = 16; // tile content px
 const GRID = 8; // 8x8 tiles
-const SIZE = T * GRID;
+const PAD = 8; // gutter per side — replicated edge pixels so mipmaps never bleed across tiles
+const CELL = T + PAD * 2; // 32px padded cell
+const SIZE = CELL * GRID; // 256px atlas (power-of-two, required for mipmaps)
 
 export interface UVRect { u0: number; v0: number; u1: number; v1: number }
 
@@ -143,41 +145,70 @@ export function getAtlas(): Atlas {
   canvas.width = SIZE;
   canvas.height = SIZE;
   const ctx = canvas.getContext("2d")!;
-  const img = ctx.createImageData(SIZE, SIZE);
-  const slots = new Map<string, number>();
+  ctx.imageSmoothingEnabled = false;
 
+  // reusable per-tile scratch canvas (painters draw in 16x16 tile-local space)
+  const tile = document.createElement("canvas");
+  tile.width = T;
+  tile.height = T;
+  const tctx = tile.getContext("2d")!;
+
+  const slots = new Map<string, number>();
   const names = Object.keys(PAINTERS);
   names.forEach((name, slot) => {
     slots.set(name, slot);
-    const tx = (slot % GRID) * T;
-    const ty = Math.floor(slot / GRID) * T;
     const rnd = mulberry32(0xc0ffee ^ (slot * 2654435761));
+    const timg = tctx.createImageData(T, T);
     PAINTERS[name]((x, y, r, g, b, a = 255) => {
-      const i = ((ty + y) * SIZE + (tx + x)) * 4;
-      img.data[i] = Math.max(0, Math.min(255, r));
-      img.data[i + 1] = Math.max(0, Math.min(255, g));
-      img.data[i + 2] = Math.max(0, Math.min(255, b));
-      img.data[i + 3] = a;
+      const i = (y * T + x) * 4;
+      timg.data[i] = Math.max(0, Math.min(255, r));
+      timg.data[i + 1] = Math.max(0, Math.min(255, g));
+      timg.data[i + 2] = Math.max(0, Math.min(255, b));
+      timg.data[i + 3] = a;
     }, rnd);
+    tctx.putImageData(timg, 0, 0);
+
+    // Composite the tile into its padded cell, then replicate edge pixels
+    // outward into the gutter. Mip levels average a texel's neighbourhood, so
+    // an edge-clamped gutter keeps that averaging within the same tile — no
+    // colour bleed from adjacent tiles even at coarse mips.
+    const cx = (slot % GRID) * CELL;
+    const cy = Math.floor(slot / GRID) * CELL;
+    const ox = cx + PAD;
+    const oy = cy + PAD;
+    ctx.drawImage(tile, ox, oy);                                       // content
+    ctx.drawImage(tile, 0, 0, T, 1, ox, cy, T, PAD);                  // top edge
+    ctx.drawImage(tile, 0, T - 1, T, 1, ox, oy + T, T, PAD);          // bottom edge
+    ctx.drawImage(tile, 0, 0, 1, T, cx, oy, PAD, T);                  // left edge
+    ctx.drawImage(tile, T - 1, 0, 1, T, ox + T, oy, PAD, T);          // right edge
+    ctx.drawImage(tile, 0, 0, 1, 1, cx, cy, PAD, PAD);                // TL corner
+    ctx.drawImage(tile, T - 1, 0, 1, 1, ox + T, cy, PAD, PAD);        // TR corner
+    ctx.drawImage(tile, 0, T - 1, 1, 1, cx, oy + T, PAD, PAD);        // BL corner
+    ctx.drawImage(tile, T - 1, T - 1, 1, 1, ox + T, oy + T, PAD, PAD); // BR corner
   });
-  ctx.putImageData(img, 0, 0);
 
   const texture = new THREE.CanvasTexture(canvas);
-  texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestFilter;
-  texture.generateMipmaps = false;
+  texture.magFilter = THREE.NearestFilter;             // crisp pixels up close
+  texture.minFilter = THREE.NearestMipmapLinearFilter; // shimmer-free at distance
+  texture.generateMipmaps = true;
+  texture.anisotropy = 8;                              // sharp ground at grazing angles
   texture.colorSpace = THREE.SRGBColorSpace;
 
-  const eps = 0.001 / GRID;
-  const uv = (tile: string): UVRect => {
-    const slot = slots.get(tile) ?? 0;
+  // UVs address the content region of each padded cell, inset a quarter texel.
+  const inset = 0.25 / SIZE;
+  const uv = (tileName: string): UVRect => {
+    const slot = slots.get(tileName) ?? 0;
     const col = slot % GRID;
     const row = Math.floor(slot / GRID);
+    const x0 = (col * CELL + PAD) / SIZE;
+    const x1 = (col * CELL + PAD + T) / SIZE;
+    const y0 = (row * CELL + PAD) / SIZE;
+    const y1 = (row * CELL + PAD + T) / SIZE;
     return {
-      u0: col / GRID + eps,
-      u1: (col + 1) / GRID - eps,
-      v1: 1 - row / GRID - eps,     // top
-      v0: 1 - (row + 1) / GRID + eps, // bottom
+      u0: x0 + inset,
+      u1: x1 - inset,
+      v1: 1 - y0 - inset,   // top
+      v0: 1 - y1 + inset,   // bottom
     };
   };
 
@@ -192,7 +223,7 @@ export function getAtlas(): Atlas {
     g.imageSmoothingEnabled = false;
     const tileCanvas = (name: string) => {
       const slot = slots.get(name) ?? 0;
-      return [(slot % GRID) * T, Math.floor(slot / GRID) * T] as const;
+      return [(slot % GRID) * CELL + PAD, Math.floor(slot / GRID) * CELL + PAD] as const;
     };
     const [topX, topY] = tileCanvas(def.tiles[0]);
     const [sideX, sideY] = tileCanvas(def.tiles[1]);

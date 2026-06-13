@@ -21,6 +21,7 @@ export function GameView({ room, isCreator, onLeave }: Props) {
       <Game
         mode="3d"
         shadows={false}
+        gl={{ antialias: true, powerPreference: "high-performance" }}
         dpr={[1, 2]}
         ambientLightProps={{ intensity: 0.55 }}
         directionalLightProps={{ position: [80, 120, 40], intensity: 1.15, castShadow: false }}
